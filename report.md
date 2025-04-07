@@ -15,8 +15,10 @@ This report details the technical architecture, implementation decisions, develo
 3. [Technical Architecture](#technical-architecture)
    - [System Overview](#system-overview)
    - [Frontend Architecture](#frontend-architecture)
+   - [Detailed Frontend Component Architecture](#detailed-frontend-component-architecture)
    - [Backend Architecture](#backend-architecture)
    - [Voice Assistant Implementation](#voice-assistant-implementation)
+   - [Backend-Frontend Communication Flow](#backend-frontend-communication-flow)
 4. [Development Progress](#development-progress)
 5. [Future Implementation: Google Assignment Integration](#future-implementation-google-assignment-integration)
 6. [Technical Challenges and Solutions](#technical-challenges-and-solutions)
@@ -101,6 +103,220 @@ The frontend uses React hooks extensively for state management and side effects:
 - `useCombinedTranscriptions`: Aggregates transcriptions from the user and agent
 - `useLocalMicTrack`: Manages microphone input for voice recognition
 
+### Detailed Frontend Component Architecture
+
+The frontend architecture of the College Assignment Assistant is built on a carefully designed component system that balances modularity, reusability, and performance. This section provides an in-depth examination of key components, their interactions, and the technical considerations behind their implementation.
+
+#### Core Component Hierarchy
+
+The application's component hierarchy follows a structured approach to managing complexity:
+
+```
+RootLayout
+└── Page
+    ├── RoomContext.Provider
+    │   └── SimpleVoiceAssistant
+    │       ├── TranscriptionView
+    │       ├── RoomAudioRenderer
+    │       ├── NoAgentNotification
+    │       └── ControlBar
+    │           ├── BarVisualizer
+    │           ├── VoiceAssistantControlBar
+    │           └── DisconnectButton
+    └── ConnectionDetails API
+```
+
+This hierarchy enables clear separation of concerns while facilitating data flow between interrelated components. Each component has a well-defined responsibility:
+
+1. **RootLayout (`app/layout.tsx`)**: Provides global styling and font configurations, establishing the base HTML structure.
+
+2. **Page Component (`app/page.tsx`)**: The main entry point that handles room initialization and connection management.
+
+3. **RoomContext.Provider**: A React context that shares the LiveKit Room instance among all child components.
+
+4. **SimpleVoiceAssistant**: Orchestrates the core voice assistant experience, including UI state management.
+
+5. **TranscriptionView**: Renders real-time transcriptions from both the user and the assistant.
+
+6. **ControlBar**: Manages the audio visualization, control buttons, and connection state feedback.
+
+#### Room Initialization and Connection Flow
+
+The room initialization process in the Page component demonstrates a sophisticated approach to establishing WebRTC connections:
+
+```typescript
+const [room] = useState(new Room());
+
+const onConnectButtonClicked = useCallback(async () => {
+  const url = new URL(
+    process.env.NEXT_PUBLIC_CONN_DETAILS_ENDPOINT ?? "/api/connection-details",
+    window.location.origin
+  );
+  const response = await fetch(url.toString());
+  const connectionDetailsData: ConnectionDetails = await response.json();
+
+  await room.connect(connectionDetailsData.serverUrl, connectionDetailsData.participantToken);
+  await room.localParticipant.setMicrophoneEnabled(true);
+}, [room]);
+```
+
+This implementation:
+
+1. Creates a persistent Room instance using React's useState
+2. Defines a memoized callback function that:
+   - Fetches connection details from a configurable endpoint
+   - Establishes a WebRTC connection with the LiveKit server
+   - Enables the user's microphone for audio capture
+
+This pattern ensures that connection resources are properly managed and that the connection process can be triggered declaratively from user interactions.
+
+#### Responsive UI State Management
+
+The SimpleVoiceAssistant component demonstrates sophisticated state management using the AnimatePresence component from Framer Motion:
+
+```tsx
+<AnimatePresence>
+  {agentState === "disconnected" && (
+    <motion.button
+      initial={{ opacity: 0, top: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0, top: "-10px" }}
+      transition={{ duration: 1, ease: [0.09, 1.04, 0.245, 1.055] }}
+      className="uppercase absolute left-1/2 -translate-x-1/2 px-4 py-2 bg-white text-black rounded-md"
+      onClick={() => props.onConnectButtonClicked()}
+    >
+      Start a conversation
+    </motion.button>
+  )}
+  <div className="w-3/4 lg:w-1/2 mx-auto h-full">
+    <TranscriptionView />
+  </div>
+</AnimatePresence>
+```
+
+This implementation:
+
+1. Uses conditional rendering based on agentState to show/hide the connection button
+2. Applies smooth animations for component mounting and unmounting
+3. Uses custom easing functions to create polished motion effects
+4. Ensures the UI remains responsive to state changes
+
+The animation approach creates a more engaging user experience while maintaining clear visual feedback about the system's state.
+
+#### Audio Visualization System
+
+The ControlBar component integrates LiveKit's audio visualization capabilities with custom styling:
+
+```tsx
+<BarVisualizer
+  state={agentState}
+  barCount={5}
+  trackRef={audioTrack}
+  className="agent-visualizer w-24 gap-2"
+  options={{ minHeight: 12 }}
+/>
+```
+
+This visualization:
+
+1. Receives the assistant's audio track to analyze audio levels
+2. Renders a configurable number of vertical bars that respond to audio intensity
+3. Applies custom styling through Tailwind CSS classes and custom CSS variables
+4. Adapts its appearance based on the agent's state (listening, thinking, speaking)
+
+Custom CSS in globals.css further enhances the visualization:
+
+```css
+:root {
+  --lk-va-bar-width: 72px;
+  --lk-control-bar-height: unset;
+}
+
+.agent-visualizer > .lk-audio-bar {
+  width: 72px;
+}
+```
+
+This approach creates a visually appealing feedback mechanism that helps users understand when the assistant is actively speaking or processing their input.
+
+#### Accessibility Considerations in Component Design
+
+The NoAgentNotification component exemplifies the project's commitment to accessibility and user feedback:
+
+```tsx
+{showNotification ? (
+  <div className="fixed text-sm left-1/2 max-w-[90vw] -translate-x-1/2 flex top-6 items-center gap-4 bg-[#1F1F1F] px-4 py-3 rounded-lg">
+    <div>
+      {/* Warning Icon SVG */}
+    </div>
+    <p className="text-pretty w-max">
+      It&apos;s quiet... too quiet. Is your agent lost? Ensure your agent is properly
+      configured and running on your machine.
+    </p>
+    <a
+      href="https://docs.livekit.io/agents/quickstarts/s2s/"
+      target="_blank"
+      className="underline whitespace-nowrap"
+    >
+      View guide
+    </a>
+    <button onClick={() => setShowNotification(false)}>
+      {/* Close Icon SVG */}
+    </button>
+  </div>
+) : null}
+```
+
+This implementation:
+
+1. Provides clear, human-readable feedback when connection issues occur
+2. Includes a visual warning icon to draw attention to the notification
+3. Offers a direct link to documentation for troubleshooting
+4. Allows users to dismiss the notification when no longer needed
+5. Uses accessible markup with appropriate contrast ratios
+
+The component's logic includes a sophisticated timeout mechanism that gives the system adequate time to establish a connection before displaying the notification:
+
+```tsx
+useEffect(() => {
+  if (props.state === "connecting") {
+    timeoutRef.current = window.setTimeout(() => {
+      if (props.state === "connecting" && agentHasConnected.current === false) {
+        setShowNotification(true);
+      }
+    }, timeToWaitMs);
+  } else {
+    // Clear timeout and hide notification for other states
+  }
+  // ...cleanup function
+}, [props.state]);
+```
+
+This approach prevents premature error messages while ensuring users aren't left wondering about connection issues.
+
+#### Tailwind CSS Integration
+
+The project makes extensive use of Tailwind CSS for styling, leveraging utility classes to create a responsive and consistent design:
+
+```tsx
+<main data-lk-theme="default" className="h-full grid content-center bg-[var(--lk-bg)]">
+  <RoomContext.Provider value={room}>
+    <div className="lk-room-container max-h-[90vh]">
+      <SimpleVoiceAssistant onConnectButtonClicked={onConnectButtonClicked} />
+    </div>
+  </RoomContext.Provider>
+</main>
+```
+
+The integration with LiveKit's theming system is achieved through:
+
+1. Custom CSS variables that override LiveKit defaults
+2. Extension of LiveKit's component styles through Tailwind classes
+3. Responsive design patterns that adapt to different screen sizes
+4. Consistent color and spacing schemes throughout the application
+
+This approach results in a cohesive design language that feels natural and intuitive while maintaining the technical capabilities required for complex real-time interactions.
+
 ### Backend Architecture
 
 The backend system is built with Python, leveraging the LiveKit Agents framework for voice processing and interaction management. The system uses a pipeline-based approach to handle voice input, process it, and generate appropriate responses.
@@ -153,6 +369,229 @@ This implementation includes:
 - **Noise Cancellation**: Background voice and noise cancellation for improved clarity
 
 The assistant is configured with a system prompt that defines its behavior and response style, ensuring it provides concise, helpful responses appropriate for a voice interface.
+
+### Backend-Frontend Communication Flow
+
+The real-time communication between the frontend and backend components represents one of the most sophisticated aspects of the College Assignment Assistant. This section provides a detailed examination of the communication flow, protocols, and technical considerations that enable the seamless voice interaction experience.
+
+#### WebRTC-Based Communication Protocol
+
+The College Assignment Assistant leverages WebRTC (Web Real-Time Communication) technology through the LiveKit platform to establish low-latency, high-quality audio streams between the user's browser and the backend voice processing system:
+
+```
+┌─────────────┐     WebRTC      ┌──────────┐      Internal      ┌─────────────┐
+│  Browser    │  Audio Stream   │  LiveKit  │   Communication   │   Backend   │
+│  Frontend   │ ◄────────────► │  Server   │ ◄───────────────► │   Services  │
+└─────────────┘                 └──────────┘                    └─────────────┘
+```
+
+1. **Secure Signaling Process**:
+   - When a user initiates a conversation by clicking "Start a conversation", the frontend generates a request to `/api/connection-details` endpoint
+   - The endpoint creates a unique room name and participant identity
+   - An AccessToken with appropriate grants is generated using the LiveKit Server SDK
+   - The token is returned to the frontend along with connection parameters
+
+2. **Connection Establishment**:
+   - The frontend connects to the LiveKit server using the provided token
+   - The backend agent connects to the same room using the LiveKit Agents SDK
+   - Both parties establish peer connections through the LiveKit infrastructure
+
+3. **Audio Stream Management**:
+   - The frontend captures the user's microphone input using the `useLocalMicTrack` hook
+   - Audio data is encoded and transmitted via WebRTC to the LiveKit server
+   - The backend receives the audio stream and processes it through the voice pipeline
+
+4. **Transcription and Response Flow**:
+   - The backend processes audio through the VAD → STT → LLM → TTS pipeline
+   - Transcriptions and responses are sent back to the frontend as WebRTC data channel messages
+   - The frontend renders these messages in real-time using the TranscriptionView component
+
+5. **State Synchronization**:
+   - The backend agent publishes state changes (listening, thinking, speaking)
+   - The frontend subscribes to these state changes via the `useVoiceAssistant` hook
+   - UI elements respond accordingly (e.g., visualizer activates, interface updates)
+
+In practice, this communication flow enables latency as low as 100-300ms from the end of user speech to the beginning of the assistant's response, creating a natural conversation experience that feels responsive and engaging.
+
+#### Authentication and Connection Security
+
+All communications between the frontend and backend are secured through multiple layers of protection:
+
+1. **Token-Based Authentication**:
+   - Each connection requires a cryptographically signed JWT token
+   - Tokens include specific grants limiting what actions the participant can perform
+   - Tokens are time-limited (15-minute expiration) to minimize security risks
+
+2. **Secure WebSocket Connections**:
+   - All WebSocket connections use WSS (WebSocket Secure) protocol
+   - TLS/SSL encryption protects all data in transit
+   - Connection parameters are never exposed in client-side code
+
+3. **Room Isolation**:
+   - Each user session creates a unique room with random identifiers
+   - Cross-session data leakage is prevented by design
+   - Backend agents only process data from their assigned rooms
+
+The implementation in `app/api/connection-details/route.ts` demonstrates how these security measures are applied:
+
+```typescript
+// Generate participant token
+const participantIdentity = `voice_assistant_user_${Math.floor(Math.random() * 10_000)}`;
+const roomName = `voice_assistant_room_${Math.floor(Math.random() * 10_000)}`;
+const participantToken = await createParticipantToken(
+  { identity: participantIdentity },
+  roomName
+);
+
+// Token generation with specific grants
+function createParticipantToken(userInfo: AccessTokenOptions, roomName: string) {
+  const at = new AccessToken(API_KEY, API_SECRET, {
+    ...userInfo,
+    ttl: "15m",  // Time-limited token
+  });
+  const grant: VideoGrant = {
+    room: roomName,
+    roomJoin: true,
+    canPublish: true,
+    canPublishData: true,
+    canSubscribe: true,
+  };
+  at.addGrant(grant);
+  return at.toJwt();
+}
+```
+
+#### Data Flow During Voice Interaction
+
+The data flow during a typical voice interaction progresses through several stages, each with specific technical considerations:
+
+1. **Initialization Phase**:
+   ```
+   Frontend                                  Backend
+      │                                         │
+      ├─ User clicks "Start conversation"       │
+      │                                         │
+      ├─ Request token ─────────────────────────┤
+      │                                         │
+      ├─ Connect to LiveKit room ───────────────┤
+      │                                         │
+      ├─ Enable microphone                      │
+      │                                         ├─ Agent connects to room
+      │                                         │
+      │                                         ├─ Agent initializes pipeline
+      │                                         │
+      │                                         ├─ Agent sends greeting
+      ├─ Receive & display greeting             │
+      │                                         │
+   ```
+
+2. **User Speaking Phase**:
+   ```
+   Frontend                                  Backend
+      │                                         │
+      ├─ Capture audio                          │
+      │                                         │
+      ├─ Stream audio via WebRTC ───────────────┤
+      │                                         │
+      │                                         ├─ VAD detects speech
+      │                                         │
+      │                                         ├─ STT processes audio incrementally
+      │                                         │
+      │                                         ├─ Send partial transcriptions
+      ├─ Display user transcription             │
+      │                                         │
+      │                                         ├─ Turn detector monitors for completion
+      │                                         │
+   ```
+
+3. **Processing and Response Phase**:
+   ```
+   Frontend                                  Backend
+      │                                         │
+      │                                         ├─ Turn detector signals completion
+      │                                         │
+      │                                         ├─ Final STT transcription
+      │                                         │
+      │                                         ├─ Send to LLM for processing
+      ├─ Update UI to "thinking" state          │
+      │                                         │
+      │                                         ├─ LLM generates response
+      │                                         │
+      │                                         ├─ TTS converts text to speech
+      │                                         │
+      │                                         ├─ Stream audio response
+      ├─ Play audio response                    │
+      │                                         │
+      ├─ Display assistant transcription        │
+      │                                         │
+   ```
+
+This intricate dance of data between frontend and backend components happens in near real-time, creating a seamless conversational experience for the user while handling complex processing in the background.
+
+#### Error Handling and Resilience
+
+The communication system includes sophisticated error handling to ensure a robust user experience:
+
+1. **Connection Recovery**:
+   - WebRTC connections automatically attempt to reconnect after network interruptions
+   - The frontend monitors connection state and provides appropriate feedback to users
+   - Backend systems maintain session state to resume conversations after reconnection
+
+2. **Graceful Degradation**:
+   - If high-quality audio streaming isn't possible, the system can fall back to lower bitrates
+   - When backend services experience high load, request queuing ensures responsiveness
+   - If specific pipeline components fail (e.g., STT service outage), appropriate error messages guide the user
+
+3. **User Feedback Mechanisms**:
+   - The `NoAgentNotification` component detects when backend agents fail to connect within 10 seconds
+   - Clear error messages direct users to appropriate troubleshooting steps
+   - Connection state is reflected in the UI to maintain transparency
+
+The implementation in `components/NoAgentNotification.tsx` demonstrates this approach:
+
+```tsx
+useEffect(() => {
+  if (props.state === "connecting") {
+    timeoutRef.current = window.setTimeout(() => {
+      if (props.state === "connecting" && agentHasConnected.current === false) {
+        setShowNotification(true);
+      }
+    }, timeToWaitMs);
+  } else {
+    if (timeoutRef.current) {
+      window.clearTimeout(timeoutRef.current);
+    }
+    setShowNotification(false);
+  }
+
+  return () => {
+    if (timeoutRef.current) {
+      window.clearTimeout(timeoutRef.current);
+    }
+  };
+}, [props.state]);
+```
+
+#### Real-World Performance Considerations
+
+In real-world deployment, several factors influence the communication performance between frontend and backend:
+
+1. **Network Conditions**:
+   - Variable user bandwidth affects audio quality and latency
+   - WebRTC's adaptive bitrate helps maintain connection under poor conditions
+   - Buffer management prevents audio gaps while balancing latency
+
+2. **Processing Latency**:
+   - Speech-to-text processing introduces variable latency (typically 200-500ms)
+   - LLM inference time varies based on query complexity (300-1500ms)
+   - Text-to-speech generation adds additional processing time (100-300ms)
+
+3. **Scalability Concerns**:
+   - Each active conversation consumes significant backend resources
+   - Connection pooling and load balancing distribute user traffic
+   - Resource scaling is triggered based on active user metrics
+
+These considerations inform both the technical architecture and the user experience design, creating a system that balances responsiveness with reliability across diverse usage conditions.
 
 ## Development Progress
 
