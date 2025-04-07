@@ -4,8 +4,8 @@
 
 | Name | Role |
 |------|------|
-| Evidnce Ejimone | Lead Developer |
-| Alfousieny Traore | Senior Developer |
+| Evidnce Ejimone | Lead Developer and Data Engineer |
+| Alfousieny Traore | Senior Developer And FrontEnd Engineer |
 | Ahmed | UX/UI Designer |
 | Prashant J | AI Expert|
 | Mozamel Adam Ateem | Product Manager |
