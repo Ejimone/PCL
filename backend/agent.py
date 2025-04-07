@@ -10,6 +10,11 @@ from livekit.agents import (
     llm,
     metrics,
 )
+<<<<<<< HEAD
+=======
+from livekit.plugins import google
+
+>>>>>>> bef9b37e788e9b56aba0b2f2359f5f42e17fc0fa
 from livekit.agents.pipeline import VoicePipelineAgent
 from livekit.plugins import (
     cartesia,
@@ -53,7 +58,14 @@ async def entrypoint(ctx: JobContext):
     agent = VoicePipelineAgent(
         vad=ctx.proc.userdata["vad"],
         stt=deepgram.STT(),
+<<<<<<< HEAD
         llm=openai.LLM(model="gpt-4o-mini"),
+=======
+        llm=google.LLM(
+  model="gemini-2.0-flash-exp",
+  temperature="0.8",
+),
+>>>>>>> bef9b37e788e9b56aba0b2f2359f5f42e17fc0fa
         tts=cartesia.TTS(),
         # use LiveKit's transformer-based turn detector
         turn_detector=turn_detector.EOUModel(),
