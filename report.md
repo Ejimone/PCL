@@ -5,9 +5,10 @@
 | Name | Role |
 |------|------|
 | Evidnce Ejimone | Lead Developer |
-| Alfousieny Traore | UX/UI Designer |
-| Prashant J | AI |
-| Emily Chen | Machine Learning Engineer |
+| Alfousieny Traore | Senior Developer |
+| Ahmed | UX/UI Designer |
+| Prashant J | AI Expert|
+| Mozamel Adam Ateem | Product Manager |
 
 ## Table of Contents
 
